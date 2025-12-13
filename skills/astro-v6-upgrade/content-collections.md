@@ -1,11 +1,12 @@
 # Content Collections Migration
 
-This is the most significant change in Astro v6. The legacy Content Collections API (from Astro v2) has been completely removed. All collections must use the Content Layer API.
+This is the most significant change in Astro v6. The legacy Content Collections API (from Astro v2 and deprecated in v5) has been completely removed. All collections must use the Content Layer API.
 
 ## Quick Check
 
 Your collections need updating if you have:
-- `src/content/config.ts` (wrong location)
+- Content files in `src/content/**` but no config file at `src/content/config.{js,mjs,ts,mts}` or `src/content.config.{js,mjs,ts,mts}`
+- `src/content/config.*` (wrong config location)
 - Collections without a `loader` property
 - Collections with `type: 'content'` or `type: 'data'`
 - Use of `getEntryBySlug()` or `getDataEntryById()`
