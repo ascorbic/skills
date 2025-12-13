@@ -20,18 +20,19 @@ description: Guide for upgrading Astro projects from v5 to v6. Use when users me
 
 **Before upgrading**, check if the project needs content collection migration. Most v5 projects already use the Content Layer API and won't need changes.
 
-**Grep for these patterns** - if found, read [content-collections.md](content-collections.md):
+**Decision tree:**
 
-| Pattern | Meaning |
-|---------|---------|
-| `src/content/config.ts` exists | Legacy config location |
-| `type: 'content'` or `type: 'data'` | Legacy collection definition |
-| `getEntryBySlug` | Deprecated query method |
-| `getDataEntryById` | Deprecated query method |
-| `entry.render()` | Legacy render method |
-| `.slug` (on entries) | Replaced by `.id` |
+1. **Does `src/content/config.{js,ts,mjs,mts}` exist?**
+   - Yes → needs migration (legacy config location)
 
-If none found, content collections are already up to date.
+2. **Are there content folders in `src/content/` but no config file anywhere?**
+   - Yes → needs migration (implicit legacy collections)
+
+3. **Otherwise, check `src/content.config.{js,ts,mjs,mts}` for:**
+   - Any collection without a `loader` property → needs migration
+   - Any collection with `type:` set → needs migration
+
+If any of the above apply, load [content-collections.md](content-collections.md) and follow the migration steps.
 
 ## Quick Fixes
 
@@ -78,7 +79,7 @@ import { z } from 'astro:schema';
 import { z } from 'astro/zod';
 ```
 
-If using Zod validation extensively, see [zod.md](zod.md) for Zod 4 syntax changes.
+If using Zod validation extensively or if you encounter Zod errors, see [zod.md](zod.md) for Zod 4 syntax changes.
 
 ### Deprecated APIs
 
