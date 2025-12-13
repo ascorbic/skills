@@ -1,0 +1,27 @@
+{
+  "name": "ascorbic-skills",
+  "owner": {
+    "name": "Matt Kane"
+  },
+  "metadata": {
+    "description": "Skills for web development",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "astro",
+      "description": "Astro development skills and documentation",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/astro-v6-upgrade"
+      ],
+      "mcpServers": {
+        "astro-docs": {
+          "type": "http",
+          "url": "https://mcp.docs.astro.build/mcp"
+        }
+      }
+    }
+  ]
+}
