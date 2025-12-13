@@ -1,114 +1,152 @@
 ---
 name: astro-v6-upgrade
-description: Guide for upgrading Astro projects from v5 to v6. Use when users mention upgrading Astro, Astro v6, Astro 6, migrating to Astro 6, or need help with Astro migration errors related to content collections, ViewTransitions, Astro.glob, Zod schemas, Node version requirements, or Content Layer API.
+description: Guide for upgrading Astro projects from v5 to v6. Use when users mention upgrading Astro, Astro v6, Astro 6, or errors related to content collections, ViewTransitions, Astro.glob, Zod schemas, or Content Layer API.
 ---
 
 # Astro v6 Upgrade Guide
 
-Help users migrate from Astro v5 to v6. This is a major upgrade with 40+ breaking changes.
-
 ## Quick Start
 
-Run the upgrade command first:
+1. **Check Node version**: Astro v6 requires Node 22.12.0+ (`node -v`)
+2. **Run upgrade**:
+   ```bash
+   npx @astrojs/upgrade    # npm
+   pnpm dlx @astrojs/upgrade  # pnpm
+   ```
+3. **Check for legacy content collections** (see below)
+4. **Fix any errors** using this guide
 
-```bash
-# npm
-npx @astrojs/upgrade
+## Check: Legacy Content Collections
 
-# pnpm
-pnpm dlx @astrojs/upgrade
+**Before upgrading**, check if the project needs content collection migration. Most v5 projects already use the Content Layer API and won't need changes.
 
-# yarn
-yarn dlx @astrojs/upgrade
+**Grep for these patterns** - if found, read [content-collections.md](content-collections.md):
+
+| Pattern | Meaning |
+|---------|---------|
+| `src/content/config.ts` exists | Legacy config location |
+| `type: 'content'` or `type: 'data'` | Legacy collection definition |
+| `getEntryBySlug` | Deprecated query method |
+| `getDataEntryById` | Deprecated query method |
+| `entry.render()` | Legacy render method |
+| `.slug` (on entries) | Replaced by `.id` |
+
+If none found, content collections are already up to date.
+
+## Quick Fixes
+
+These are simple renames/replacements. Apply directly:
+
+### ViewTransitions → ClientRouter
+
+```astro
+---
+// Before
+import { ViewTransitions } from 'astro:transitions';
+// After
+import { ClientRouter } from 'astro:transitions';
+---
+
+<!-- Before -->
+<ViewTransitions />
+<!-- After -->
+<ClientRouter />
 ```
 
-After upgrading, you may not need any code changes. If you see errors, use this guide.
+Remove `handleForms` prop if present - it's now default behavior.
 
-## Detection
+### Astro.glob() → import.meta.glob()
 
-Run `scripts/detect.sh <project-path>` to scan an Astro project for patterns needing migration. The script identifies:
+```astro
+---
+// Before
+const posts = await Astro.glob('./posts/*.md');
 
-- Legacy content collection patterns
-- Deprecated imports and APIs
-- Removed features still in use
-- Integration API changes
+// After
+const posts = Object.values(import.meta.glob('./posts/*.md', { eager: true }));
+---
+```
 
-## Triage: What Applies to You?
+### Zod imports
 
-### Everyone Must Do
+```ts
+// Before (deprecated)
+import { z } from 'astro:content';
+import { z } from 'astro:schema';
 
-1. **Node 22**: Astro v6 requires Node 22.12.0+. Check with `node -v`
-2. **Vite 7**: Automatically upgraded, but check plugins for compatibility
-3. **Zod 4**: Schema syntax changes if you use Zod validation
+// After
+import { z } from 'astro/zod';
+```
 
-### Check Your Project
+If using Zod validation extensively, see [zod.md](zod.md) for Zod 4 syntax changes.
 
-| If you use... | Read... |
-|--------------|---------|
-| Content collections | [content-collections.md](content-collections.md) - **Most impactful change** |
-| Zod schemas in content/actions | [dependencies.md](dependencies.md) - Zod 4 syntax changes |
-| `<ViewTransitions />` | [removed.md](removed.md) - Now `<ClientRouter />` |
-| `Astro.glob()` | [removed.md](removed.md) - Use `import.meta.glob()` |
-| Custom integrations/adapters | [integration-api.md](integration-api.md) |
-| i18n routing | [changed-defaults.md](changed-defaults.md) |
-| Environment variables | [changed-defaults.md](changed-defaults.md) |
+### Deprecated APIs
 
-## Reference Files
+```ts
+// Astro.site in getStaticPaths → import.meta.env.SITE
+export function getStaticPaths() {
+  const site = import.meta.env.SITE;  // was Astro.site
+}
 
-Load these as needed based on what applies:
+// Astro.generator → just remove it
 
-| File | Contents |
-|------|----------|
-| [content-collections.md](content-collections.md) | Legacy Content Collections → Content Layer API migration |
-| [dependencies.md](dependencies.md) | Node 22, Vite 7, Zod 4 upgrade details |
-| [removed.md](removed.md) | Features removed entirely (ViewTransitions, Astro.glob, etc.) |
-| [deprecated.md](deprecated.md) | Features still working but deprecated |
-| [changed-defaults.md](changed-defaults.md) | Behavior changes (i18n, script order, env vars, images) |
-| [breaking-changes.md](breaking-changes.md) | Code changes needed (endpoints, params, etc.) |
-| [integration-api.md](integration-api.md) | Changes for integration/adapter authors |
+// import.meta.env.ASSETS_PREFIX → astro:config/server
+import { build } from 'astro:config/server';
+const prefix = build.assetsPrefix;
+```
 
-## Common Migration Paths
+### Removed: emitESMImage
 
-### Simple Site (no content collections)
-
-1. Upgrade Node to 22.12.0+
-2. Run `npx @astrojs/upgrade`
-3. Replace `Astro.glob()` with `import.meta.glob()` if used
-4. Replace `<ViewTransitions />` with `<ClientRouter />` if used
-5. Done
-
-### Site Using Content Collections
-
-1. Upgrade Node to 22.12.0+
-2. Run `npx @astrojs/upgrade`
-3. **Read [content-collections.md](content-collections.md)** - follow the full migration
-4. Update Zod schemas per [dependencies.md](dependencies.md)
-5. Check other removed/deprecated features
-
-### Integration/Adapter Author
-
-1. Upgrade Node to 22.12.0+
-2. Run `npx @astrojs/upgrade`
-3. **Read [integration-api.md](integration-api.md)** - significant API changes
-4. Test with Vite 7 Environment API changes
+```ts
+// Before
+import { emitESMImage } from 'astro/assets/utils';
+// After
+import { emitImageMetadata } from 'astro/assets/utils';
+```
 
 ## Error Quick Reference
 
-| Error | Solution |
-|-------|----------|
-| `LegacyContentConfigError` | Rename `src/content/config.ts` → `src/content.config.ts` |
-| `ContentCollectionMissingALoaderError` | Add `loader` property to collection. See [content-collections.md](content-collections.md) |
+| Error | Fix |
+|-------|-----|
+| `LegacyContentConfigError` | Move `src/content/config.ts` → `src/content.config.ts` |
+| `ContentCollectionMissingALoaderError` | Add `loader` to collection - see [content-collections.md](content-collections.md) |
 | `ContentCollectionInvalidTypeError` | Remove `type: 'content'` or `type: 'data'` from collection |
 | `GetEntryDeprecationError` | Replace `getEntryBySlug()`/`getDataEntryById()` with `getEntry()` |
-| `ContentSchemaContainsSlugError` | Replace `slug` with `id` in schemas and queries |
-| Cannot find `ViewTransitions` | Replace with `ClientRouter` from `astro:transitions` |
-| Cannot find `Astro.glob` | Use `import.meta.glob()` instead |
+| `ContentSchemaContainsSlugError` | Replace `.slug` with `.id` |
+| Cannot find `ViewTransitions` | Use `ClientRouter` (see above) |
+| Cannot find `Astro.glob` | Use `import.meta.glob()` (see above) |
 | Node version error | Upgrade to Node 22.12.0+ |
+| Zod validation errors | Check [zod.md](zod.md) for Zod 4 changes |
+
+## Deep Dive Files
+
+Load these only when needed:
+
+| File | When to load |
+|------|--------------|
+| [content-collections.md](content-collections.md) | Legacy content collections need migration |
+| [zod.md](zod.md) | Using Zod schemas with `.email()`, `.url()`, custom errors, or transforms |
+| [behavior-changes.md](behavior-changes.md) | Subtle issues: i18n redirects, script order, env vars, image sizing |
+| [integration-api.md](integration-api.md) | Building integrations or adapters |
+
+## Experimental Flags to Remove
+
+These flags are now stable or default. Remove from config:
+
+```js
+export default defineConfig({
+  experimental: {
+    // Remove all of these:
+    liveContentCollections: true,
+    preserveScriptOrder: true,
+    staticImportMetaEnv: true,
+    headingIdCompat: true,
+    failOnPrerenderConflict: true,  // Use prerenderConflictBehavior instead
+  },
+});
+```
 
 ## Resources
 
-- [Full Astro v6 Changelog](https://github.com/withastro/astro/blob/main/packages/astro/CHANGELOG.md)
 - [Astro v6 Blog Post](https://astro.build/blog/astro-6/)
-- [Vite 7 Migration Guide](https://vite.dev/guide/migration)
-- [Zod 4 Changelog](https://zod.dev/v4/changelog)
 - [Content Layer Deep Dive](https://astro.build/blog/content-layer-deep-dive/)
