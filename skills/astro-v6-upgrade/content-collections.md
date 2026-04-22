@@ -1,162 +1,155 @@
 # Content Collections Migration
 
-This is the most significant change in Astro v6. The legacy Content Collections API (from Astro v2 and deprecated in v5) has been completely removed. All collections must use the Content Layer API.
+This is often the most significant change when upgrading to v6. The legacy Content Collections API (from Astro v2, deprecated in v5) has been **completely removed**, including the automatic backwards-compatibility that v5 applied even without a flag. All collections must use the Content Layer API.
 
 ## Quick Check
 
-Your collections need updating if you have:
-- Content files in `src/content/**` but no config file at `src/content/config.{js,mjs,ts,mts}` or `src/content.config.{js,mjs,ts,mts}`
-- `src/content/config.*` (wrong config location)
-- Collections without a `loader` property
-- Collections with `type: 'content'` or `type: 'data'`
-- Use of `getEntryBySlug()` or `getDataEntryById()`
-- Use of `entry.slug` property
-- Use of `entry.render()` method
+Your collections need updating if any of these apply:
+
+- Content files in `src/content/**` but no config file at `src/content.config.{js,mjs,ts,mts}`.
+- A config file at `src/content/config.*` (old location, now wrong).
+- A collection without a `loader` property.
+- A collection with `type: 'content'` or `type: 'data'`.
+- Code uses `getEntryBySlug()` or `getDataEntryById()`.
+- Code uses `entry.slug` or `entry.render()`.
+
+## Temporary Escape Hatch
+
+If you cannot migrate immediately, add this flag to keep v4-style collections working (temporary only):
+
+```js title="astro.config.mjs"
+import { defineConfig } from 'astro/config';
+
+export default defineConfig({
+  legacy: {
+    collectionsBackwardsCompat: true,
+  },
+});
+```
+
+This preserves:
+
+- `src/content/config.ts` config location
+- `type: 'content'` / `type: 'data'` collections without loaders
+- `entry.slug` and `entry.render()`
+- Path-based entry IDs (instead of slug-based)
+
+**Note**: The older `legacy.collections: true` flag has been **removed**. Remove it from your config if present.
+
+Migrate to Content Layer as soon as possible and drop this flag.
 
 ## Migration Steps
 
 ### 1. Rename Config File
 
-Move and rename your content config:
-
 ```bash
-# Old location
+# Before
 src/content/config.ts
-
-# New location
+# After
 src/content.config.ts
 ```
 
-The file must be at the project root's `src/` directory, not inside `src/content/`.
+The file must be at `src/content.config.{js,ts,mjs,mts}`, not inside `src/content/`.
 
-### 2. Add Loader to Collections
+If missing, Astro throws `LegacyContentConfigError`.
 
-Every collection must define a `loader`. For local content, use the built-in `glob()` loader:
+### 2. Add a Loader to Every Collection
 
-```ts
-// src/content.config.ts
+Every collection must define a `loader`. For local Markdown/MDX, use the built-in `glob()` loader:
+
+```ts title="src/content.config.ts"
 import { defineCollection } from 'astro:content';
 import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
 
 const blog = defineCollection({
-  // Add loader - specify pattern and base directory
-  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/blog' }),
+  loader: glob({ pattern: '**/[^_]*.{md,mdx}', base: './src/data/blog' }),
   schema: z.object({
     title: z.string(),
     description: z.string(),
     pubDate: z.coerce.date(),
+    updatedDate: z.coerce.date().optional(),
   }),
 });
 
 export const collections = { blog };
 ```
 
-#### Glob Loader Options
+#### Common glob patterns
+
+- `'**/*.md'` - all markdown
+- `'**/*.{md,mdx}'` - markdown and MDX
+- `'**/[^_]*.md'` - all markdown except files starting with `_`
+- `'*.json'` - JSON files in the base directory only
+
+Missing loaders throw `ContentCollectionMissingALoaderError`.
+
+### 3. Remove `type`
+
+There is no collection `type` anymore. Delete it:
 
 ```ts
-glob({
-  pattern: '**/*.{md,mdx}',  // Glob pattern for files
-  base: './src/content/blog', // Base directory (relative to project root)
-})
-```
-
-Common patterns:
-- `'**/*.md'` - All markdown files
-- `'**/*.{md,mdx}'` - Markdown and MDX
-- `'**/[^_]*.md'` - All markdown except those starting with `_`
-- `'*.json'` - JSON files in base directory only
-
-### 3. Remove Type Property
-
-The `type` property is no longer used. Remove it:
-
-```ts
-// Before (v5)
 const blog = defineCollection({
-  type: 'content',  // Remove this
-  schema: z.object({ /* ... */ }),
-});
-
-// After (v6)
-const blog = defineCollection({
-  loader: glob({ pattern: '**/*.md', base: './src/content/blog' }),
+  type: 'content',   // ❌ Remove
+  loader: glob({ pattern: '**/*.md', base: './src/data/blog' }),
   schema: z.object({ /* ... */ }),
 });
 ```
+
+If left in, Astro throws `ContentCollectionInvalidTypeError`.
 
 ### 4. Update Query Methods
 
-Replace deprecated query methods with `getEntry()`:
+Replace deprecated helpers with `getEntry()`:
 
 ```ts
-// Before (v5)
+// Before
 import { getEntryBySlug, getDataEntryById } from 'astro:content';
-
 const post = await getEntryBySlug('blog', 'my-post');
 const author = await getDataEntryById('authors', 'john');
 
-// After (v6)
+// After
 import { getEntry } from 'astro:content';
-
 const post = await getEntry('blog', 'my-post');
 const author = await getEntry('authors', 'john');
 ```
 
-### 5. Replace slug with id
+Using the removed helpers throws `GetEntryDeprecationError`.
 
-The `slug` property no longer exists. Use `id` instead:
+### 5. Replace `.slug` with `.id`
 
-```astro
+The `slug` property is gone. `id` is now the URL-safe slug. If you need the source filename, use `filePath`.
+
+```astro title="src/pages/[slug].astro"
 ---
-// Before (v5)
+import { getCollection } from 'astro:content';
+
 export async function getStaticPaths() {
   const posts = await getCollection('blog');
   return posts.map((post) => ({
-    params: { slug: post.slug },  // ❌ No longer exists
-    props: post,
-  }));
-}
----
-
----
-// After (v6)
-export async function getStaticPaths() {
-  const posts = await getCollection('blog');
-  return posts.map((post) => ({
-    params: { slug: post.id },    // ✅ Use id
+    params: { slug: post.id },   // ✅ was post.slug
     props: post,
   }));
 }
 ---
 ```
 
-If you need the original filename (previously available as `id`), use `filePath`:
+If a schema references `slug`, Astro throws `ContentSchemaContainsSlugError`.
 
-```ts
-// v5: post.id was the filename, post.slug was URL-safe
-// v6: post.id is URL-safe (was slug), post.filePath is the filename
-```
+### 6. Replace `entry.render()` with `render(entry)`
 
-### 6. Update Render Method
-
-The `render()` method is no longer on the entry object. Import it from `astro:content`:
+The `render()` method is gone from entries. Import and call `render()` from `astro:content`:
 
 ```astro
 ---
-// Before (v5)
+// Before
 import { getEntry } from 'astro:content';
-
-const post = await getEntry('blog', 'my-post');
+const post = await getEntry('pages', 'homepage');
 const { Content, headings } = await post.render();
----
-<Content />
 
----
-// After (v6)
+// After
 import { getEntry, render } from 'astro:content';
-
-const post = await getEntry('blog', 'my-post');
+const post = await getEntry('pages', 'homepage');
 const { Content, headings } = await render(post);
 ---
 <Content />
@@ -166,8 +159,7 @@ const { Content, headings } = await render(post);
 
 ### Before (v5 Legacy)
 
-```ts
-// src/content/config.ts
+```ts title="src/content/config.ts"
 import { defineCollection, z } from 'astro:content';
 
 const blog = defineCollection({
@@ -182,8 +174,7 @@ const blog = defineCollection({
 export const collections = { blog };
 ```
 
-```astro
-// src/pages/blog/[slug].astro
+```astro title="src/pages/blog/[slug].astro"
 ---
 import { getCollection, getEntryBySlug } from 'astro:content';
 
@@ -203,8 +194,7 @@ const { Content } = await post.render();
 
 ### After (v6 Content Layer)
 
-```ts
-// src/content.config.ts
+```ts title="src/content.config.ts"
 import { defineCollection } from 'astro:content';
 import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
@@ -221,10 +211,9 @@ const blog = defineCollection({
 export const collections = { blog };
 ```
 
-```astro
-// src/pages/blog/[slug].astro
+```astro title="src/pages/blog/[slug].astro"
 ---
-import { getCollection, getEntry, render } from 'astro:content';
+import { getCollection, render } from 'astro:content';
 
 export async function getStaticPaths() {
   const posts = await getCollection('blog');
@@ -240,12 +229,11 @@ const { Content } = await render(post);
 <Content />
 ```
 
-## Data Collections
+## Data Collections (JSON, YAML)
 
-For data collections (JSON, YAML), use the same pattern:
+Same pattern as content - just a different glob:
 
-```ts
-// src/content.config.ts
+```ts title="src/content.config.ts"
 import { defineCollection } from 'astro:content';
 import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
@@ -254,7 +242,7 @@ const authors = defineCollection({
   loader: glob({ pattern: '**/*.json', base: './src/content/authors' }),
   schema: z.object({
     name: z.string(),
-    email: z.email(),
+    email: z.email(),       // Zod 4: was z.string().email()
     bio: z.string().optional(),
   }),
 });
@@ -262,12 +250,11 @@ const authors = defineCollection({
 export const collections = { authors };
 ```
 
-## Remote Content
+## Remote / Custom Loaders
 
-For remote content (APIs, CMSs), use custom loaders:
+For API-backed collections, write an async loader function or a full loader object. A full loader gets full access to the store, incremental sync, and metadata:
 
-```ts
-// src/content.config.ts
+```ts title="src/content.config.ts"
 import { defineCollection } from 'astro:content';
 import { z } from 'astro/zod';
 
@@ -289,35 +276,25 @@ const products = defineCollection({
 export const collections = { products };
 ```
 
+See the [Content Loader reference](https://docs.astro.build/en/reference/content-loader-reference/) for the full `Loader` interface and `createSchema()` (used when a loader needs to expose a dynamically-generated schema).
+
+## Live Content Collections (formerly experimental)
+
+`experimental.liveContentCollections` is now **stable**. Remove the experimental flag if present. See the [content collections guide](https://docs.astro.build/en/guides/content-collections/) for live collections usage.
+
 ## Common Errors
 
-### LegacyContentConfigError
-
-**Cause**: Config file is at `src/content/config.ts`
-**Fix**: Move to `src/content.config.ts`
-
-### ContentCollectionMissingALoaderError
-
-**Cause**: Collection doesn't define a `loader`
-**Fix**: Add `loader: glob({ pattern: '...', base: '...' })`
-
-### ContentCollectionInvalidTypeError
-
-**Cause**: Collection has `type: 'content'` or `type: 'data'`
-**Fix**: Remove the `type` property
-
-### GetEntryDeprecationError
-
-**Cause**: Using `getEntryBySlug()` or `getDataEntryById()`
-**Fix**: Use `getEntry()` instead
-
-### ContentSchemaContainsSlugError
-
-**Cause**: Schema or queries use `slug` property
-**Fix**: Replace `slug` with `id`
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `LegacyContentConfigError` | Config at `src/content/config.*` | Rename to `src/content.config.*` |
+| `ContentCollectionMissingALoaderError` | Collection has no `loader` | Add `loader: glob({ ... })` |
+| `ContentCollectionInvalidTypeError` | Collection has `type: 'content'`/`'data'` | Remove `type` |
+| `GetEntryDeprecationError` | Using `getEntryBySlug()` / `getDataEntryById()` | Replace with `getEntry()` |
+| `ContentSchemaContainsSlugError` | Schema / queries use `slug` | Use `id`; use `filePath` for original filename |
 
 ## Resources
 
+- [Astro v5 upgrade guide - legacy collections](https://docs.astro.build/en/guides/upgrade-to/v5/#legacy-v20-content-collections-api) (full step-by-step for the original v4 → v5 migration)
 - [Content Collections Guide](https://docs.astro.build/en/guides/content-collections/)
 - [Content Layer Deep Dive](https://astro.build/blog/content-layer-deep-dive/)
 - [Content Loader Reference](https://docs.astro.build/en/reference/content-loader-reference/)

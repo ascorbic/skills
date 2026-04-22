@@ -1,12 +1,11 @@
 # ascorbic/skills
 
-A Claude Code plugin marketplace for web development.
+Some agent skills by Matt Kane.
 
 ## Installation
 
 ```bash
-/plugin marketplace add ascorbic/skills
-/plugin install astro@ascorbic-skills
+npx skills add ascorbic/skills
 ```
 
 ## Plugins
